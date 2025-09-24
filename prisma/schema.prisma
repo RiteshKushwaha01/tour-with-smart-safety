@@ -1,0 +1,156 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  phone     String?
+  name      String
+  role      Role     @default(TOURIST)
+  language  String   @default("en")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Emergency contacts stored as JSON
+  emergencyContacts Json?
+
+  // Relations
+  touristProfile TouristProfile?
+  locationPings  LocationPing[]
+  incidents      Incident[]
+
+  @@map("users")
+}
+
+model TouristProfile {
+  id               String    @id @default(cuid())
+  userId           String    @unique
+  blockchainAddress String?
+  idStatus         IdStatus  @default(PENDING)
+  tripStart        DateTime?
+  tripEnd          DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // Relations
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  digitalId DigitalID?
+
+  @@map("tourist_profiles")
+}
+
+model DigitalID {
+  id               String    @id @default(cuid())
+  touristProfileId String    @unique
+  dataHash         String    // Keccak256 hash of KYC data
+  network          String    @default("polygon-mumbai")
+  txHash           String?   // Blockchain transaction hash
+  contractAddress  String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  // Relations
+  touristProfile TouristProfile @relation(fields: [touristProfileId], references: [id], onDelete: Cascade)
+
+  @@map("digital_ids")
+}
+
+model LocationPing {
+  id        String   @id @default(cuid())
+  userId    String
+  latitude  Float
+  longitude Float
+  speed     Float?
+  accuracy  Float?
+  timestamp DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("location_pings")
+  @@index([userId, timestamp])
+}
+
+model GeoZone {
+  id          String    @id @default(cuid())
+  name        String
+  level       ZoneLevel
+  polygonGeoJSON Json   // GeoJSON polygon data
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("geo_zones")
+}
+
+model Incident {
+  id          String        @id @default(cuid())
+  userId      String
+  type        IncidentType
+  status      IncidentStatus @default(ACTIVE)
+  latitude    Float?
+  longitude   Float?
+  description String?
+  metadata    Json?         // Additional incident data
+  assignedTo  String?       // Police officer ID
+  createdAt   DateTime      @default(now())
+  resolvedAt  DateTime?
+  updatedAt   DateTime      @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("incidents")
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+enum Role {
+  TOURIST
+  POLICE
+  TOURISM_ADMIN
+  OPERATOR
+}
+
+enum IdStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  REVOKED
+}
+
+enum ZoneLevel {
+  RESTRICTED
+  HIGH_RISK
+  SAFE
+}
+
+enum IncidentType {
+  SOS
+  GEOFENCE
+  INACTIVITY
+  MANUAL
+}
+
+enum IncidentStatus {
+  ACTIVE
+  ACKNOWLEDGED
+  EN_ROUTE
+  RESOLVED
+  FALSE_ALARM
+}
